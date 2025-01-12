@@ -1,0 +1,6 @@
+# Ignore pretrained model files
+experiments/pretrained_models/*.pth
+# Ignore all .log files
+*.log
+# Ignore all files in a directory called "temp"
+temp/
