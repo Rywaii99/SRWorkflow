@@ -8,8 +8,8 @@ def generate_meta_info_aid():
 
     元信息文件内容包括每个图像的文件名、分辨率（宽度和高度）以及通道数。
     """
-    gt_folder = 'datasets/AID/AID_train_HR_sub/'  # 高分辨率子图像文件夹路径
-    meta_info_txt = 'basicsr/data/meta_info/meta_info_AID600sub_GT.txt'  # 输出的元信息文件路径
+    gt_folder = 'datasets/AID/AID_train_HR/'  # 高分辨率子图像文件夹路径
+    meta_info_txt = 'datasets/meta_info/meta_info_AIDp600_GT.txt'  # 输出的元信息文件路径
 
     # 获取文件夹中的所有图像文件路径，按名称排序
     img_list = sorted(list(scandir(gt_folder)))

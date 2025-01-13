@@ -3,21 +3,24 @@ function generate_bicubic_img()
 %% 双线性下采样的图像（bicubic-downsampled images）
 
 %% 设置相关配置
-% dataset = 'AID';
-dataset = 'DOTA';
+dataset = 'AID';
+% dataset = 'DOTA';
 % dataset = 'DIOR';
 root_folder = sprintf('../../datasets/processed/%s', dataset);  % 根目录路径
-input_folder = fullfile(root_folder, 'test_HR');  % 输入文件夹路径
+input_folder = fullfile(root_folder, 'val_HR');  % 输入文件夹路径
+% input_folder = fullfile(root_folder, 'test_HR');  % 输入文件夹路径
 % input_folder = fullfile(root_folder, 'train_HR');  % 输入文件夹路径
 % input_folder = fullfile(root_folder, 'AID_train_HR');  % 输入文件夹路径
 
 mod_scale = 12;  % 用于modcrop操作的模数（即裁剪图像时的缩放比例）
-up_scale = 2;    % 下采样和上采样的比例，表示图像缩小或放大的倍数
+up_scale = 4;    % 下采样和上采样的比例，表示图像缩小或放大的倍数
 
+save_mod_folder = fullfile(root_folder, sprintf('%s_val_HR', dataset));  % 输出修改后图像的文件夹路径
+save_lr_folder = fullfile(root_folder, sprintf('%s_val_LR_bicubic', dataset), sprintf('X%d', up_scale));  % 输出低分辨率图像的文件夹路径
 % save_mod_folder = fullfile(root_folder, sprintf('%s_train_HR', dataset));  % 输出修改后图像的文件夹路径
 % save_lr_folder = fullfile(root_folder, sprintf('%s_train_LR_bicubic', dataset), sprintf('X%d', up_scale));  % 输出低分辨率图像的文件夹路径
-save_mod_folder = fullfile(root_folder, sprintf('%s_test_HR', dataset));  % 输出修改后图像的文件夹路径
-save_lr_folder = fullfile(root_folder, sprintf('%s_test_LR_bicubic', dataset), sprintf('X%d', up_scale));  % 输出低分辨率图像的文件夹路径
+% save_mod_folder = fullfile(root_folder, sprintf('%s_test_HR', dataset));  % 输出修改后图像的文件夹路径
+% save_lr_folder = fullfile(root_folder, sprintf('%s_test_LR_bicubic', dataset), sprintf('X%d', up_scale));  % 输出低分辨率图像的文件夹路径
 
 %% 检查并创建保存文件夹
 % 创建保存修改后图像的文件夹
@@ -53,12 +56,12 @@ for i = 1:length(filepaths)  % 遍历文件夹中的每个文件
         img = im2double(img);  % 将图像数据类型转换为双精度
 
         % 对图像进行 modcrop 操作
-        % img = modcrop(img, mod_scale);  % 根据给定的 mod_scale 值裁剪图像
-        % imwrite(img, fullfile(save_mod_folder, [img_name, '.png']));  % 保存裁剪后的图像
+        img = modcrop(img, mod_scale);  % 根据给定的 mod_scale 值裁剪图像
+        imwrite(img, fullfile(save_mod_folder, [img_name, '.png']));  % 保存裁剪后的图像
 
         % 对图像进行低分辨率处理（下采样）
-        im_lr = imresize(img, 1/up_scale, 'bicubic');  % 使用双三次插值进行下采样
-        imwrite(im_lr, fullfile(save_lr_folder, [img_name, '.png']));  % 保存低分辨率图像
+        % im_lr = imresize(img, 1/up_scale, 'bicubic');  % 使用双三次插值进行下采样
+        % imwrite(im_lr, fullfile(save_lr_folder, [img_name, '.png']));  % 保存低分辨率图像
     end
 end
 
