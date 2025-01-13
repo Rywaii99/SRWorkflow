@@ -99,79 +99,117 @@ def paired_random_crop(img_gts, img_lqs, gt_patch_size, scale, gt_path=None):
 
 
 def augment(imgs, hflip=True, rotation=True, flows=None, return_status=False):
-    """Augment: horizontal flips OR rotate (0, 90, 180, 270 degrees).
+    """数据增强：进行水平翻转或旋转（0°, 90°, 180°, 270°）。
 
-    We use vertical flip and transpose for rotation implementation.
-    All the images in the list use the same augmentation.
+    我们使用垂直翻转和转置来实现旋转操作。
+    所有输入的图像都会应用相同的增强操作。
 
     Args:
-        imgs (list[ndarray] | ndarray): Images to be augmented. If the input
-            is an ndarray, it will be transformed to a list.
-        hflip (bool): Horizontal flip. Default: True.
-        rotation (bool): Rotation. Default: True.
-        flows (list[ndarray]): Flows to be augmented. If the input is an
-            ndarray, it will be transformed to a list.
-            Dimension is (h, w, 2). Default: None.
-        return_status (bool): Return the status of flip and rotation.
-            Default: False.
+        imgs (list[ndarray] | ndarray): 待增强的图像。如果输入为 ndarray，则会转换为列表。
+        hflip (bool, 可选): 是否进行水平翻转。默认值为 True。
+        rotation (bool, 可选): 是否进行旋转。默认值为 True。
+        flows (list[ndarray] | ndarray, 可选): 需要增强的光流数据。如果输入是 ndarray 类型，会被转换为列表形式。
+                               光流数据的维度是 (h, w, 2)。默认为 None。
+        return_status (bool, 可选): 是否返回翻转和旋转的状态。默认值为 False。
 
     Returns:
-        list[ndarray] | ndarray: Augmented images and flows. If returned
-            results only have one element, just return ndarray.
+        list[ndarray] | ndarray: 增强后的图像和光流。如果只提供了单张图像或光流，结果将以 ndarray 的形式返回，而非列表。
+
+    说明：
+        - 对于每张图像，可能会进行水平翻转、垂直翻转、或旋转（90度的转置）。
+        - 如果传入了光流数据，光流也会进行相同的增强操作，翻转时还会对光流的水平和垂直分量进行符号变换。
+        - 如果 `return_status` 为 True，则会返回增强操作的状态（包括水平翻转、垂直翻转和旋转）。
     """
-    hflip = hflip and random.random() < 0.5  # 随机决定是否进行水平翻转
-    vflip = rotation and random.random() < 0.5  # 随机决定是否进行垂直翻转
-    rot90 = rotation and random.random() < 0.5  # 随机决定是否进行旋转
+
+    # 根据随机值决定是否进行水平翻转、垂直翻转和旋转
+    hflip = hflip and random.random() < 0.5
+    vflip = rotation and random.random() < 0.5
+    rot90 = rotation and random.random() < 0.5
 
     def _augment(img):
+        """增强单张图像"""
         if hflip:  # 水平翻转
             cv2.flip(img, 1, img)
         if vflip:  # 垂直翻转
             cv2.flip(img, 0, img)
-        if rot90:  # 顺时针旋转 90°
-            img = img.transpose(1, 0, 2)
+        if rot90:  # 旋转 90 度
+            img = img.transpose(1, 0, 2)  # 转置操作（旋转 90 度）
         return img
 
     def _augment_flow(flow):
-        if hflip:  # 水平翻转并调整流向
+        """增强光流数据"""
+        if hflip:  # 水平翻转
             cv2.flip(flow, 1, flow)
-            flow[:, :, 0] *= -1  # 翻转水平方向的流量
-        if vflip:  # 垂直翻转并调整流向
+            flow[:, :, 0] *= -1  # 水平分量反向
+        if vflip:  # 垂直翻转
             cv2.flip(flow, 0, flow)
-            flow[:, :, 1] *= -1  # 翻转垂直方向的流量
-        if rot90:  # 顺时针旋转 90°
-            flow = flow.transpose(1, 0, 2)
-            flow = flow[:, :, [1, 0]]  # 交换流动的维度
+            flow[:, :, 1] *= -1  # 垂直分量反向
+        if rot90:  # 旋转 90 度
+            flow = flow.transpose(1, 0, 2)  # 转置操作（旋转 90 度）
+            flow = flow[:, :, [1, 0]]  # 交换 x 和 y 轴
         return flow
 
-    if not isinstance(imgs, list):  # 如果输入不是列表，将其转换为列表
+    # 如果输入是单张图像，将其转换为列表
+    if not isinstance(imgs, list):
         imgs = [imgs]
-    imgs = [_augment(img) for img in imgs]  # 对每张图像进行增强
-    if len(imgs) == 1:  # 如果只有一张图像，直接返回图像
+
+    # 对每张图像应用增强操作
+    imgs = [_augment(img) for img in imgs]
+
+    # 如果只有一张图像，返回原始 ndarray 类型
+    if len(imgs) == 1:
         imgs = imgs[0]
 
-    if flows is not None:  # 如果有光流信息，也进行增强
+    # 如果提供了光流数据，也进行相同的增强操作
+    if flows is not None:
+        if not isinstance(flows, list):
+            flows = [flows]
+        flows = [_augment_flow(flow) for flow in flows]
 
-        def img_rotate(img, angle, center=None, scale=1.0):
-            """Rotate image.
+        # 如果只有一组光流数据，返回原始 ndarray 类型
+        if len(flows) == 1:
+            flows = flows[0]
 
-            Args:
-                img (ndarray): Image to be rotated.
-                angle (float): Rotation angle in degrees. Positive values mean
-                    counter-clockwise rotation.
-                center (tuple[int]): Rotation center. If the center is None,
-                    initialize it as the center of the image. Default: None.
-                scale (float): Isotropic scale factor. Default: 1.0.
-            """
-            (h, w) = img.shape[:2]  # 获取图像的高度和宽度
+        return imgs, flows
+    else:
+        # 如果不返回光流，只返回增强后的图像，且根据 return_status 决定是否返回状态信息
+        if return_status:
+            return imgs, (hflip, vflip, rot90)
+        else:
+            return imgs
 
-            if center is None:  # 如果没有指定旋转中心，使用图像中心
-                center = (w // 2, h // 2)
 
-            matrix = cv2.getRotationMatrix2D(center, angle, scale)  # 计算旋转矩阵
-            rotated_img = cv2.warpAffine(img, matrix, (w, h))  # 应用旋转矩阵进行图像旋转
-            return rotated_img
+def img_rotate(img, angle, center=None, scale=1.0):
+    """旋转图像。
 
+    使用 OpenCV 的仿射变换功能对图像进行旋转，旋转角度为给定的角度，旋转中心为给定的点，
+    并可选择是否进行缩放。
+
+    Args:
+        img (ndarray): 待旋转的图像。
+        angle (float): 旋转角度，单位为度。正值表示逆时针旋转，负值表示顺时针旋转。
+        center (tuple[int, int], 可选): 旋转中心坐标。如果未指定中心，默认为图像的中心。
+            默认值为 None。
+        scale (float, 可选): 等比例缩放因子。默认值为 1.0，表示不进行缩放。
+
+    Returns:
+        ndarray: 旋转后的图像。
+
+    """
+    # 获取图像的高度和宽度
+    (h, w) = img.shape[:2]
+
+    # 如果没有指定旋转中心，默认使用图像的中心
+    if center is None:
+        center = (w // 2, h // 2)
+
+    # 获取旋转矩阵
+    matrix = cv2.getRotationMatrix2D(center, angle, scale)
+
+    # 使用仿射变换对图像进行旋转
+    rotated_img = cv2.warpAffine(img, matrix, (w, h))
+
+    return rotated_img
 
 """
 ================= 测试专用 =================
