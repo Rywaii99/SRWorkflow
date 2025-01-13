@@ -1,5 +1,5 @@
 # general settings
-name: 001_NAFNet_SR_bs2p192
+name: 001_NAFNet_x2_w106b128_AID_300k_B16G1P192
 model_type: SRModel
 scale: 2
 num_gpu: 1
@@ -23,7 +23,7 @@ datasets:
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 2
-    batch_size_per_gpu: 1
+    batch_size_per_gpu: 16
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
     pin_memory: false

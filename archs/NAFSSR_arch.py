@@ -323,3 +323,4 @@ if __name__ == '__main__':
 
     flops, params = profile(net, inputs=(input,))
     print(f"FLOPs:{flops / 1e9}G, Params:{params / 1e6}M")
+# FLOPs:328.140818176G, Params:10.44822M
