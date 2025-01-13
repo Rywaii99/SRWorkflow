@@ -130,3 +130,86 @@ class CosineAnnealingRestartLR(_LRScheduler):
             (1 + math.cos(math.pi * ((self.last_epoch - nearest_restart) / current_period)))
             for base_lr in self.base_lrs
         ]
+
+
+class CosineAnnealingRestartCyclicLR(_LRScheduler):
+    """
+    Cosine annealing with restarts learning rate scheme, where each cycle can have a different minimum learning rate.
+
+    例如，配置如下：
+    periods = [10, 10, 10, 10]  # 每个周期的长度
+    restart_weights = [1, 0.5, 0.5, 0.5]  # 每次重启时的学习率权重
+    eta_mins = [1e-7, 1e-6, 1e-5, 1e-4]  # 每个周期的最小学习率
+
+    这个调度器有四个周期，每个周期长度为 10 次迭代。在每个周期结束时（即10、20、30次迭代），
+    调度器会使用 `restart_weights` 中对应的权重重新启动，并且每个周期的最小学习率由 `eta_mins` 列表指定。
+
+    Args:
+        optimizer (torch.nn.optimizer): 用于优化的 PyTorch 优化器。
+        periods (list): 每个余弦退火周期的长度。
+        restart_weights (list): 每次重启时的学习率权重。默认值为 [1]。
+        eta_mins (list): 每个周期的最小学习率，允许每个周期有不同的最小学习率。默认值为 [0]。
+        last_epoch (int): 用于 _LRScheduler 的最后一个 epoch，默认为 -1。
+
+    说明：
+        - `periods` 和 `restart_weights` 的长度应该一致，且每个周期都有一个对应的最小学习率 `eta_mins`。
+        - 在每个周期内，学习率会按余弦函数衰减，直到到达最小学习率（`eta_min`）。
+        - 每当一个周期结束时（`last_epoch` 达到当前周期的末尾），学习率会根据 `restart_weights` 重新启动。
+        - `eta_mins` 允许每个周期的最小学习率不同，从而支持更加灵活的调度策略。
+    """
+
+    def __init__(self,
+                 optimizer,
+                 periods,
+                 restart_weights=(1,),
+                 eta_mins=(0,),
+                 last_epoch=-1):
+        # 保存初始化参数
+        self.periods = periods
+        self.init_preiods = periods  # 备份初始的 periods 列表
+        self.restart_weights = restart_weights
+        self.eta_mins = eta_mins  # 每个周期对应不同的最小学习率
+
+        # 确保 periods 和 restart_weights 的长度一致
+        assert (len(self.periods) == len(self.restart_weights)), \
+            'periods 和 restart_weights 长度必须相同。'
+
+        # 计算每个周期的累积周期
+        self.cumulative_period = [
+            sum(self.periods[0:i + 1]) for i in range(0, len(self.periods))
+        ]
+
+        # 初始化父类
+        super(CosineAnnealingRestartCyclicLR, self).__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        """
+        根据当前 epoch 返回调整后的学习率。
+
+        在每个周期内，学习率根据余弦退火衰减，并且周期结束时会根据 restart_weights 重启。
+        每个周期的最小学习率可以不同，由 eta_mins 控制。
+
+        Returns:
+            list: 每个参数组的学习率。
+        """
+        # 找到当前 epoch 所在的周期索引
+        idx = get_position_from_periods(self.last_epoch, self.cumulative_period)
+
+        # 获取当前周期的重启权重
+        current_weight = self.restart_weights[idx]
+
+        # 找到上一个周期的末尾 epoch，用于计算距离重启的步数
+        nearest_restart = 0 if idx == 0 else self.cumulative_period[idx - 1]
+
+        # 当前周期的长度
+        current_period = self.periods[idx]
+
+        # 获取当前周期的最小学习率
+        eta_min = self.eta_mins[idx]
+
+        # 计算每个参数组的学习率
+        return [
+            eta_min + current_weight * 0.5 * (base_lr - eta_min) *
+            (1 + math.cos(math.pi * ((self.last_epoch - nearest_restart) / current_period)))
+            for base_lr in self.base_lrs
+        ]
