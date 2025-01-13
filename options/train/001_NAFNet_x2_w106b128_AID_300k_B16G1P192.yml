@@ -32,9 +32,9 @@ datasets:
 
   val: # validation dataset
     name: AID_val
-    type: ExampleDataset
+    type: PairedImageDataset
     dataroot_gt: datasets/processed/AID/AID_val_HR
-    dataroot_lq: datasets/processed/AID/AID_val_LR_bicubic
+    dataroot_lq: datasets/processed/AID/AID_val_LR_bicubic/X2
     io_backend:
       type: disk
 
@@ -83,7 +83,7 @@ train:
 # validation settings
 val:
   val_freq: !!float 5e3
-  save_img: True # 原 False
+  save_img: True # False
   pbar: False
 
   metrics:

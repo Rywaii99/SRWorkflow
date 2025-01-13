@@ -174,3 +174,136 @@ class Upsample(nn.Sequential):
 
         # 调用父类的构造函数，初始化 Sequential 容器
         super(Upsample, self).__init__(*m)
+
+
+class LayerNormFunction(torch.autograd.Function):
+    """
+    自定义的Layer Normalization实现，继承自torch.autograd.Function。
+    该类实现了LayerNorm的前向传播和反向传播逻辑。
+
+    参考文献:
+    - Ba, Jimmy, et al. "Layer normalization." arXiv preprint arXiv:1607.06450 (2016).
+    """
+
+    @staticmethod
+    def forward(ctx, x, weight, bias, eps):
+        """
+        前向传播：计算输入x的Layer Normalization。
+
+        Args:
+            ctx (torch.autograd.FunctionContext): 用于保存计算过程中需要反向传播的变量。
+            x (torch.Tensor): 输入的四维张量，形状为(N, C, H, W)，分别表示批量大小、通道数、高度和宽度。
+            weight (torch.Tensor): 权重参数，形状为(C,)，通常初始化为1。
+            bias (torch.Tensor): 偏置参数，形状为(C,)，通常初始化为0。
+            eps (float): 防止除零的一个小常数，默认为1e-6。
+
+        Returns:
+            torch.Tensor: 经Layer Normalization后的输出张量，形状与输入相同(N, C, H, W)。
+        """
+        ctx.eps = eps  # 保存eps，用于反向传播时使用
+        N, C, H, W = x.size()  # 获取输入x的形状
+        mu = x.mean(1, keepdim=True)  # 计算每个通道的均值
+        var = (x - mu).pow(2).mean(1, keepdim=True)  # 计算每个通道的方差
+        y = (x - mu) / (var + eps).sqrt()  # 标准化操作 (x - mu) / sqrt(var + eps)
+        ctx.save_for_backward(y, var, weight)  # 保存y, var和weight，供反向传播使用
+
+        # 应用缩放和偏移 (weight * y + bias)
+        y = weight.view(1, C, 1, 1) * y + bias.view(1, C, 1, 1)
+        return y  # 返回Layer Normalization后的结果
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        """
+        反向传播：计算输入x、weight和bias的梯度。
+
+        Args:
+            ctx (torch.autograd.FunctionContext): 保存了前向传播过程中需要反向传播的变量。
+            grad_output (torch.Tensor): 来自下一层的梯度，形状与前向传播的输出相同(N, C, H, W)。
+
+        Returns:
+            tuple: 包含输入x的梯度、weight的梯度、bias的梯度和eps的梯度。
+                - 输入x的梯度：`gx`
+                - weight的梯度：`(grad_output * y).sum(dim=3).sum(dim=2).sum(dim=0)`
+                - bias的梯度：`grad_output.sum(dim=3).sum(dim=2).sum(dim=0)`
+                - eps的梯度：`None`，此处未计算
+        """
+        eps = ctx.eps  # 获取eps，防止除零
+
+        N, C, H, W = grad_output.size()  # 获取grad_output的形状
+        y, var, weight = ctx.saved_variables  # 获取前向传播时保存的变量
+        g = grad_output * weight.view(1, C, 1, 1)  # 按照权重调整grad_output
+        mean_g = g.mean(dim=1, keepdim=True)  # 计算grad_output的均值
+
+        mean_gy = (g * y).mean(dim=1, keepdim=True)  # 计算grad_output与y的加权均值
+        gx = 1. / torch.sqrt(var + eps) * (g - y * mean_gy - mean_g)  # 计算x的梯度
+
+        # 返回梯度信息
+        return gx, (grad_output * y).sum(dim=3).sum(dim=2).sum(dim=0), grad_output.sum(dim=3).sum(dim=2).sum(dim=0), None
+
+
+class LayerNorm2d(nn.Module):
+    """
+    LayerNorm2d层：实现了二维输入的Layer Normalization操作。
+
+    参考文献:
+    - Ba, Jimmy, et al. "Layer normalization." arXiv preprint arXiv:1607.06450 (2016).
+    """
+
+    def __init__(self, channels, eps=1e-6):
+        """
+        初始化LayerNorm2d层。
+
+        Args:
+            channels (int): 输入张量的通道数，即输入x的第二维C。
+            eps (float, optional): 防止除零的常数，默认为1e-6。
+        """
+        super(LayerNorm2d, self).__init__()
+        self.register_parameter('weight', nn.Parameter(torch.ones(channels)))  # 初始化权重为1
+        self.register_parameter('bias', nn.Parameter(torch.zeros(channels)))  # 初始化偏置为0
+        self.eps = eps  # 保存eps
+
+    def forward(self, x):
+        """
+        前向传播：执行Layer Normalization操作。
+
+        Args:
+            x (torch.Tensor): 输入张量，形状为(N, C, H, W)，表示批量大小、通道数、高度和宽度。
+
+        Returns:
+            torch.Tensor: 返回Layer Normalization处理后的输出张量，形状与输入相同(N, C, H, W)。
+        """
+        return LayerNormFunction.apply(x, self.weight, self.bias, self.eps)
+
+
+# 处理多个输入的Sequential类
+class MySequential(nn.Sequential):
+    """
+    MySequential是一个自定义的顺序容器类，继承自`nn.Sequential`。
+    该类重载了`forward`方法，以支持处理多个输入并将它们传递给容器中的每个模块。
+    """
+
+    def forward(self, *inputs):
+        """
+        前向传播方法，处理多个输入。
+
+        该方法会依次将输入传递给 `MySequential` 中的每个模块（层），
+        如果输入是元组，则会将每个元素分别传递给模块。
+        适用于需要多个输入并进行处理的场景。
+
+        Args:
+            *inputs (tuple): 输入数据，可以是一个或多个张量。
+
+        Returns:
+            inputs: 经过每个模块处理后的输出。输出形式与输入形式相同，具体取决于模块的行为。
+        """
+        # 遍历MySequential容器中的每个模块（层）
+        for module in self._modules.values():
+            # 如果输入是元组类型，意味着有多个输入
+            if type(inputs) == tuple:
+                # 将多个输入分别传递给当前模块
+                inputs = module(*inputs)
+            else:
+                # 如果只有单个输入，直接传递给模块
+                inputs = module(inputs)
+        return inputs
+
