@@ -266,3 +266,8 @@ def train_pipeline(root_path):
     # 关闭 TensorBoard 日志记录器
     if tb_logger:
         tb_logger.close()
+
+
+if __name__ == '__main__':
+    root_path = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir))
+    train_pipeline(root_path)
