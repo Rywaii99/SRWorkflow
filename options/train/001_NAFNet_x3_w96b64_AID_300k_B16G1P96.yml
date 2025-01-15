@@ -1,7 +1,7 @@
 # general settings
-name: 001_NAFNet_x2_w106b128_AID_300k_B16G1P192
+name: 001_NAFNet_x3_w96b64_AID_300k_B16G1P96
 model_type: SRModel
-scale: 2
+scale: 3
 num_gpu: 1
 manual_seed: 123
 find_unused_parameters: true
@@ -11,40 +11,40 @@ datasets:
   train:
     name: AID_train
     type: PairedImageDataset
-    dataroot_gt: datasets/processed/AID/AID_train_HR.lmdb
-    dataroot_lq: datasets/processed/AID/AID_train_LR_bicubic_X2.lmdb
+    dataroot_gt: datasets/processed/AID/AID_train_HR
+    dataroot_lq: datasets/processed/AID/AID_train_LR_bicubic/X3
     filename_tmpl: '{}'
     io_backend:
-      type: lmdb
+      type: disk
 
     use_hflip: true
     use_rot: true
 
     # data loader
     use_shuffle: true
-    num_worker_per_gpu: 2
+    num_worker_per_gpu: 16
     batch_size_per_gpu: 16
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
     pin_memory: false
 
-    gt_size: 192
+    gt_size: 96
 
   val: # validation dataset
     name: AID_val
     type: PairedImageDataset
     dataroot_gt: datasets/processed/AID/AID_val_HR
-    dataroot_lq: datasets/processed/AID/AID_val_LR_bicubic/X2
+    dataroot_lq: datasets/processed/AID/AID_val_LR_bicubic/X3
     io_backend:
       type: disk
 
 # network structures
 network_g:
   type: NAFNetSR
-  up_scale: 2
-  width: 106
-  num_blks: 128
-  drop_path_rate: 0.3
+  up_scale: 3
+  width: 96
+  num_blks: 64
+  drop_path_rate: 0.2
   drop_out_rate: 0.0
 
 # path
