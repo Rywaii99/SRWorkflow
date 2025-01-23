@@ -200,6 +200,7 @@ def train_pipeline(root_path):
 
     # 开始训练
     logger.info(f'Start training from epoch: {start_epoch}, iter: {current_iter}')
+    logger.info(f"Initial GPU Memory Usage: {torch.cuda.memory_allocated() / 1024 ** 2:.2f} MB")  # 记录初始显存占用
     data_timer, iter_timer = AvgTimer(), AvgTimer()  # 计时器，用于统计数据加载时间和迭代时间
     start_time = time.time()
 
