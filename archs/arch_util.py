@@ -3,6 +3,7 @@ import torch
 from torch import nn as nn
 from torch.nn import init as init
 from torch.nn.modules.batchnorm import _BatchNorm
+import torch.nn.functional as F
 
 
 @torch.no_grad()
@@ -141,6 +142,59 @@ def pixel_unshuffle(x, scale):
     # 调整维度顺序，将 (scale, scale) 像素块的元素展开并调整顺序
     # 例如，如果 scale=2，输入会从 (b, c, h, 2, w, 2) 重排列为 (b, c, 2, 2, h, w)
     return x_view.permute(0, 1, 3, 5, 2, 4).reshape(b, out_channel, h, w)  # 最后重塑为 (b, out_channel, h, w)
+
+
+class PixelUnshuffle(nn.Module):
+    """
+    像素反卷积（Pixel Unshuffle）模块，继承自 `nn.Module`。
+
+    该操作通常用于图像下采样任务，将高分辨率图像的特征图按给定的比例分解为低分辨率图像块的特征。
+    它是 `PixelShuffle` 的逆操作。
+
+    Args:
+        scale (int): 下采样比例。指定如何分解像素，`scale=2` 表示将每个 2x2 的块反卷积成一个通道。
+
+    Shape:
+        - 输入: (b, c, hh, hw)，其中 b 是批量大小，c 是通道数，hh 和 hw 是输入特征图的高度和宽度。
+        - 输出: (b, c * scale^2, h, w)，其中 h 和 w 是输出特征图的高度和宽度。
+
+    示例:
+        >>> pixel_unshuffle = PixelUnshuffle(scale=2)
+        >>> x = torch.randn(1, 3, 8, 8)  # 输入形状 (1, 3, 8, 8)
+        >>> output = pixel_unshuffle(x)
+        >>> print(output.shape)  # 输出形状 (1, 12, 4, 4)
+    """
+    def __init__(self, scale):
+        """
+        初始化 PixelUnshuffle 模块。
+
+        Args:
+            scale (int): 下采样比例。
+        """
+        super(PixelUnshuffle, self).__init__()
+        self.scale = scale  # 设置下采样比例
+
+    def forward(self, x):
+        """
+        前向传播函数，执行像素反卷积操作。
+
+        Args:
+            x (Tensor): 输入特征图，形状为 (b, c, hh, hw)。
+
+        Returns:
+            Tensor: 输出特征图，形状为 (b, c * scale^2, h, w)。
+        """
+        # 调用 torch.nn.functional.pixel_unshuffle 执行像素反卷积操作
+        return F.pixel_unshuffle(x, self.scale)
+
+    def extra_repr(self):
+        """
+        返回模块的额外信息，用于打印模块时显示。
+
+        Returns:
+            str: 模块的额外信息。
+        """
+        return f'scale={self.scale}'  # 返回下采样比例信息
 
 
 class Upsample(nn.Sequential):
@@ -312,6 +366,44 @@ def default_conv(in_channels, out_channels, kernel_size, bias=True):
     return nn.Conv2d(
         in_channels, out_channels, kernel_size,
         padding=(kernel_size//2), bias=bias)
+
+
+class BasicBlock(nn.Sequential):
+    def __init__(
+        self, conv, in_channels, out_channels, kernel_size, stride=1, bias=True,
+        bn=False, act=nn.PReLU()):
+
+        m = [conv(in_channels, out_channels, kernel_size, bias=bias)]
+        if bn:
+            m.append(nn.BatchNorm2d(out_channels))
+        if act is not None:
+            m.append(act)
+
+        super(BasicBlock, self).__init__(*m)
+
+
+class ResBlock(nn.Module):
+    def __init__(
+        self, conv, n_feats, kernel_size,
+        bias=True, bn=False, act=nn.ReLU(True), res_scale=1):
+
+        super(ResBlock, self).__init__()
+        m = []
+        for i in range(2):
+            m.append(conv(n_feats, n_feats, kernel_size, bias=bias))
+            if bn:
+                m.append(nn.BatchNorm2d(n_feats))
+            if i == 0:
+                m.append(act)
+
+        self.body = nn.Sequential(*m)
+        self.res_scale = res_scale
+
+    def forward(self, x):
+        res = self.body(x).mul(self.res_scale)
+        res += x
+
+        return res
 
 
 class MeanShift(nn.Conv2d):
