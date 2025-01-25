@@ -361,7 +361,7 @@ class NAFNetLocal(Local_Base, NAFNet):
 
 if __name__ == '__main__':
     img_channel = 3
-    width = 64
+    width = 32
 
     enc_blks = [2, 2, 4, 8]
     middle_blk_num = 12
