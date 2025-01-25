@@ -131,6 +131,26 @@ def load_resume_state(opt):
     return resume_state  # 返回恢复状态
 
 
+def print_network_parameters(net):
+    """
+    打印神经网络的参数数量。
+
+    该函数遍历神经网络的所有参数，并计算参数的总数量。
+
+    Args:
+        net (torch.nn.Module): 需要统计参数的神经网络模型。
+    """
+    num_params = 0  # 初始化参数数量为 0
+
+    # 遍历模型的所有参数
+    for param in net.parameters():
+        # param.numel() 返回当前参数的元素数量
+        num_params += param.numel()  # 累加每个参数的元素数量
+
+    # 打印总参数数量
+    return f'Total number of parameters: {num_params}'
+
+
 def train_pipeline(root_path):
     """Train pipeline for model training.
 
@@ -201,6 +221,7 @@ def train_pipeline(root_path):
     # 开始训练
     logger.info(f'Start training from epoch: {start_epoch}, iter: {current_iter}')
     logger.info(f"Initial GPU Memory Usage: {torch.cuda.memory_allocated() / 1024 ** 2:.2f} MB")  # 记录初始显存占用
+    logger.info(print_network_parameters(model))
     data_timer, iter_timer = AvgTimer(), AvgTimer()  # 计时器，用于统计数据加载时间和迭代时间
     start_time = time.time()
 
