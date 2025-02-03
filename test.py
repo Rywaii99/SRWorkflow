@@ -41,9 +41,8 @@ def test_pipeline(root_path):
         logger.info(f'Testing {test_set_name}...')  # 记录正在测试的数据集名称
         model.validation(test_loader, current_iter=opt['name'], tb_logger=None, save_img=opt['val']['save_img'])  # 使用模型进行验证
 
-
 if __name__ == '__main__':
     # 获取当前文件的根路径
-    root_path = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir))
+    root_path = osp.abspath(osp.join(__file__, osp.pardir))
     # 调用测试流程函数
     test_pipeline(root_path)
