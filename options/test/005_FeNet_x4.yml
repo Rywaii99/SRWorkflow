@@ -1,0 +1,57 @@
+name: 005_FeNet_x4
+model_type: SRModel
+scale: 4    # !!!
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 123
+
+datasets:
+  test_1:  # the 1st test dataset
+    name: AID
+    type: PairedImageDataset
+    dataroot_gt: datasets/processed/AID/AID_test_HR
+    dataroot_lq: datasets/processed/AID/AID_test_LR_bicubic/X4  # !!!
+    io_backend:
+      type: disk
+
+  test_2:  # the 2nd test dataset
+    name: DOTA
+    type: PairedImageDataset
+    dataroot_gt: datasets/processed/DOTA/DOTA_test_HR
+    dataroot_lq: datasets/processed/DOTA/DOTA_test_LR_bicubic/X4  # !!!
+    io_backend:
+      type: disk
+
+  test_4:
+    name: DIOR
+    type: PairedImageDataset
+    dataroot_gt: datasets/processed/DIOR/DIOR_test_HR
+    dataroot_lq: datasets/processed/DIOR/DIOR_test_LR_bicubic/X4  # !!!
+    io_backend:
+      type: disk
+
+# network structures
+network_g:
+  type: FENet
+  upscale_factor: 4
+  num_fea: 48
+  num_LBs: 4
+
+# path
+path:
+  pretrain_network_g: experiments/005_FeNet_x4_f48b4_AID_100k_B16G1P128/models/net_g_latest.pth
+
+# validation settings
+val:
+  save_img: true
+  suffix: ~  # add suffix to saved images, if None, use exp name
+  pbar: false
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 4        # !!!
+      test_y_channel: false
+    ssim:
+      type: calculate_ssim
+      crop_border: 4        # !!!
+      test_y_channel: false
