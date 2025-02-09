@@ -157,6 +157,8 @@ class SRModel(BaseModel):
         with_metrics = self.opt['val'].get('metrics') is not None
         # 判断是否使用进度条（pbar）
         use_pbar = self.opt['val'].get('pbar', False)
+        # 判断是否使用分块测试(block-by-block)
+        block_by_block = self.opt['val'].get('block_by_block', False)
 
         # 如果需要计算度量指标，并且是第一次执行，则初始化指标结果
         if with_metrics:
@@ -183,7 +185,46 @@ class SRModel(BaseModel):
 
             # 输入数据，执行测试
             self.feed_data(val_data)
-            self.test()
+
+            if block_by_block:
+                # 获取图像尺寸
+                b, c, h, w = self.lq.shape
+                self.origin_lq = self.lq
+                factor = self.opt['scale']
+                tp = self.opt['val']['patch_size']
+                ip = tp // factor
+
+                # 初始化输出图像
+                sr = torch.zeros((b, c, h * factor, w * factor))
+
+                # 按块处理图像
+                for iy in range(0, h, ip):
+                    if iy + ip > h:
+                        iy = h - ip
+                    ty = factor * iy
+
+                    for ix in range(0, w, ip):
+                        if ix + ip > w:
+                            ix = w - ip
+                        tx = factor * ix
+
+                        # 提取当前块
+                        lr_p = self.origin_lq[:, :, iy:iy + ip, ix:ix + ip]
+                        self.lq = lr_p.to(self.device)  # 把当前块传到GPU
+                        self.test()
+
+                        # 获取超分辨率结果
+                        visuals = self.get_current_visuals()
+                        sr_p = visuals['result']
+
+                        # 将每个块的结果放回到全图的位置
+                        sr[:, :, ty:ty + tp, tx:tx + tp] = sr_p
+
+                # 恢复拼接后的图像
+                self.output = sr
+                self.lq = self.origin_lq
+            else:
+                self.test()
 
             # 获取当前的视觉输出（低质量图像，超分辨率图像，地面真值图像）
             visuals = self.get_current_visuals()
@@ -200,6 +241,8 @@ class SRModel(BaseModel):
 
             # 为了避免 GPU 内存溢出，手动删除低质量图像和输出，清理缓存
             del self.lq
+            if hasattr(self, 'origin_lq'):
+                del self.origin_lq
             del self.output
             torch.cuda.empty_cache()
 

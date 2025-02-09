@@ -221,7 +221,7 @@ def train_pipeline(root_path):
     # 开始训练
     logger.info(f'Start training from epoch: {start_epoch}, iter: {current_iter}')
     logger.info(f"Initial GPU Memory Usage: {torch.cuda.memory_allocated() / 1024 ** 2:.2f} MB")  # 记录初始显存占用
-    logger.info(print_network_parameters(model))
+    # logger.info(print_network_parameters(model))
     data_timer, iter_timer = AvgTimer(), AvgTimer()  # 计时器，用于统计数据加载时间和迭代时间
     start_time = time.time()
 
@@ -274,6 +274,8 @@ def train_pipeline(root_path):
             train_data = prefetcher.next()  # 获取下一批数据
         # end of iter
 
+        # 清理CUDA缓存，防止内存泄漏
+        torch.cuda.empty_cache()
     # end of epoch
     consumed_time = str(datetime.timedelta(seconds=int(time.time() - start_time)))  # 计算总训练时间
     logger.info(f'End of training. Time consumed: {consumed_time}')
