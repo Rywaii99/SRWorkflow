@@ -1,10 +1,10 @@
 from copy import deepcopy
 
 from utils.registry import METRIC_REGISTRY
-from .fid import calculate_fid
+from .fid_lpips import calculate_lpips, calculate_fid
 from .psnr_ssim import calculate_psnr, calculate_ssim
 
-__all__ = ['calculate_metric', 'calculate_psnr', 'calculate_ssim', 'calculate_fid']
+__all__ = ['calculate_metric', 'calculate_psnr', 'calculate_ssim', 'calculate_fid', 'calculate_lpips']
 
 
 def calculate_metric(data, opt):
