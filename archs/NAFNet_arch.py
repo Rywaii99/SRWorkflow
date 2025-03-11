@@ -171,7 +171,7 @@ class NAFBlock(nn.Module):
         return flops
 
 
-@ARCH_REGISTRY.register()
+# @ARCH_REGISTRY.register()
 class NAFNet(nn.Module):
     """
     NAFNet：一个基于NAFBlock的网络，包含编码器、解码器、和中间块，适用于图像恢复任务。
@@ -333,7 +333,7 @@ class NAFNet(nn.Module):
         return x
 
 
-@ARCH_REGISTRY.register()
+# @ARCH_REGISTRY.register()
 class NAFNetLocal(Local_Base, NAFNet):
     """
     NAFNetLocal类：继承NAFNet并添加本地处理功能。
@@ -372,7 +372,7 @@ if __name__ == '__main__':
     # dec_blks = [1, 1, 1, 1]
 
     net = NAFNet(img_channel=img_channel, width=width, middle_blk_num=middle_blk_num,
-                      enc_blk_nums=enc_blks, dec_blk_nums=dec_blks)
+                      enc_blk_nums=enc_blks, dec_blk_nums=dec_blks, scale=4)
 
 
     inp_shape = (3, 256, 256)
@@ -388,6 +388,6 @@ if __name__ == '__main__':
 
     # thop
     from thop import profile
-    flops, params = profile(net, inputs=(torch.randn(1, 3, 256, 256),))
+    flops, params = profile(net, inputs=(torch.randn(16, 3, 128, 128),))
     print(f"FLOPs:{flops/1e9}G, Params:{params/1e6}M")
-    print(f"FLOPs:{net.flops(256, 256)/1e9}G, Params:{params/1e6}M")
+    print(f"FLOPs:{net.flops(128, 128)/1e9}G, Params:{params/1e6}M")

@@ -243,9 +243,9 @@ class CCALayer(nn.Module):
 # ================================
 
 
-class GCABlock(nn.Module):
+class GCBlock(nn.Module):
     """
-    Gated Convolutional Attention Block (GCAB)：结合深度可分离卷积、门控机制和通道注意力机制的特征增强模块。
+    Gated Convolutional Block (GCB)：结合深度可分离卷积、门控机制和通道注意力机制的特征增强模块。
     """
 
     def __init__(self, c, dw_expansion_factor=2, ffn_expansion_factor=2, drop_out_rate=0.):
@@ -300,7 +300,7 @@ class GCABlock(nn.Module):
 
     def forward(self, inp):
         """
-        前向传播：GCAB 的计算过程，包括卷积操作、门控机制、通道注意力、前馈网络等。
+        前向传播：GCB 的计算过程，包括卷积操作、门控机制、通道注意力、前馈网络等。
 
         Args:
             inp (torch.Tensor): 输入张量，形状为 (N, C, H, W)，其中：
@@ -352,10 +352,81 @@ class GCABlock(nn.Module):
         return y + ffn_out * self.gamma  # 输入形状: y -> (N, C, H, W), ffn_out -> (N, C, H, W) -> 输出形状: (N, C, H, W)
 
 
+class SERBlock(nn.Module):
+    def __init__(self, in_channels):
+        super(SERBlock, in_channels).__init__()
+        self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
+        self.gelu1 = nn.GELU()
+        self.cca1 = CCALayer(in_channels)
+        self.norm1 = LayerNorm2d(in_channels)
+
+        self.conv2 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
+        self.gelu2 = nn.GELU()
+        self.cca2 = CCALayer(in_channels)
+        self.norm2 = LayerNorm2d(in_channels)
+
+        self.beta = nn.Parameter(torch.zeros((1, in_channels, 1, 1)), requires_grad=True)
+
+    def forward(self, x):
+        identity = x
+        out = self.conv1(x)
+        out = self.gelu1(out)
+        out = out * self.cca1(out)
+        out = self.norm1(out)
+        out = self.conv2(out)
+        out = self.gelu2(out)
+        out = out * self.cca2(out)
+        out = self.norm2(out)
+        out = identity + self.beta * out
+        return out
+
+
+class SCAM(nn.Module):
+    def __init__(self, in_channels):
+        super(SCAM, in_channels).__init__()
+
+        self.serb1 = SERBlock(32)
+        self.serb2 = SERBlock(64)
+        self.serb3 = SERBlock(128)
+        self.serb4 = SERBlock(256)
+
+        self.down1 = nn.Sequential(
+            nn.Conv2d(32, 16, 1, bias=False),  # 1x1 卷积减少通道数
+            PixelUnshuffle(2)  # 像素反卷积下采样
+        )
+
+        self.down2 = nn.Sequential(
+            nn.Conv2d(64, 32, 1, bias=False),  # 1x1 卷积减少通道数
+            PixelUnshuffle(2)  # 像素反卷积下采样
+        )
+
+        self.down3 = nn.Sequential(
+            nn.Conv2d(128, 64, 1, bias=False),  # 1x1 卷积减少通道数
+            PixelUnshuffle(2)  # 像素反卷积下采样
+        )
+
+        self.post_conv1 = nn.Conv2d(512, 64, 1, bias=False)
+        self.post_dwconv2 = nn.Conv2d(64, 32, 1, bias=False, groups=64)
+
+    def forward(self, m1, m2, m3, m4):
+        f1 = self.down1(self.serb1(m1)) # f1(N, 64, H/2, W/2)
+        f2 = self.down2(torch.cat(self.serb2(m2), f1)) # f2(N, 128, H/4, W/4)
+        f3 = self.down3(torch.cat(self.serb3(m3), f2)) # f3(N, 256, H/8, W/8)
+        f4 = torch.cat(self.serb4(m4), f3)             # f4(N, 512, H/8, W/8)
+
+        out = self.post_conv1(f4)
+        out = self.post_dwconv2(out)
+        out = torch.sigmoid(out)
+        return out
+
+
+
+
+
 @ARCH_REGISTRY.register()
-class GCABNet(nn.Module):
+class GCBNet(nn.Module):
     """
-    GCABNet：一个基于 GCABlock 的网络，包含编码器、解码器和中间块，适用于图像恢复任务。
+    GCBNet：一个基于 GCABlock 的网络，包含编码器、解码器和中间块，适用于图像恢复任务。
 
     Args:
         img_channel (int): 输入图像的通道数，默认为 3（RGB 图像）。
@@ -408,7 +479,7 @@ class GCABNet(nn.Module):
             # 添加编码器块（多个 GCABlock）
             self.encoders.append(
                 nn.Sequential(
-                    *[GCABlock(chan) for _ in range(num)]
+                    *[GCBlock(chan) for _ in range(num)]
                 )
             )
             # 添加下采样模块
@@ -423,7 +494,7 @@ class GCABNet(nn.Module):
 
         # 构建中间块
         self.middle_blks = nn.Sequential(
-            *[GCABlock(chan) for _ in range(middle_blk_num)]
+            *[GCBlock(chan) for _ in range(middle_blk_num)]
         )
 
         # 构建解码器
@@ -440,7 +511,7 @@ class GCABNet(nn.Module):
             # 添加解码器块（多个 GCABlock）
             self.decoders.append(
                 nn.Sequential(
-                    *[GCABlock(chan) for _ in range(num)]
+                    *[GCBlock(chan) for _ in range(num)]
                 )
             )
 
@@ -512,6 +583,16 @@ class GCABNet(nn.Module):
         return x
 
 
+class GCBwSalNet(nn.Module):
+    def __init__(self,
+                 img_channel=3,
+                 n_feat=32,
+                 middle_blk_num=1,
+                 enc_blk_nums=[],
+                 dec_blk_nums=[],
+                 scale=2):
+        super().__init__()
+
 
 if __name__ == '__main__':
     img_channel = 3
@@ -521,7 +602,7 @@ if __name__ == '__main__':
     middle_blk_num = 12
     dec_blks = [2, 2, 2, 2]
 
-    net = GCABNet(img_channel, n_feat, middle_blk_num, enc_blks, dec_blks)
+    net = GCBNet(img_channel, n_feat, middle_blk_num, enc_blks, dec_blks)
 
     from thop import profile
 
